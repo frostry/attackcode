@@ -3,22 +3,21 @@ from gpoly import *
 import random
 import helper
 from ctypes import *
-import cProfile
 import time
 from itertools import repeat
 from multiprocessing import Pool
 from sys import argv
 
-class Ding19(object):
+class LBA_PAKE(object):
     def __init__(self, n, q, sigma, seed = None):
         self.n = n
         self.q = q
         self.sigma = sigma
         self.a = Poly.uniform(self.n, self.q)
-        self.si = Ding19.gen_secret(self.n, self.q, self.sigma)
-        self.ei = Ding19.gen_pubkey_error(self.n, self.q, self.sigma)
-        self.sj = Ding19.gen_secret(self.n, self.q, self.sigma, seed)
-        self.ej = Ding19.gen_pubkey_error(self.n, self.q, self.sigma)
+        self.si = LBA_PAKE.gen_secret(self.n, self.q, self.sigma)
+        self.ei = LBA_PAKE.gen_pubkey_error(self.n, self.q, self.sigma)
+        self.sj = LBA_PAKE.gen_secret(self.n, self.q, self.sigma, seed)
+        self.ej = LBA_PAKE.gen_pubkey_error(self.n, self.q, self.sigma)
 
     @staticmethod
     def gen_secret(n, q, sigma, seed = None):
@@ -40,7 +39,7 @@ class Ding19(object):
             return 0
 
     def signal(self, v):
-        return [Ding19.sig(self.q, v[i]) for i in range(self.n)]
+        return [LBA_PAKE.sig(self.q, v[i]) for i in range(self.n)]
 
     def mod2(self, v, w):
         if self.n != v.n or self.n != len(w): raise Exception
@@ -65,17 +64,17 @@ class Ding19(object):
         self.xi = self.a * self.si + 2 * self.ei
         return self.xi
 
-    #def bob(self, Pi, Pj, xi, simplified=True):
+    # LBA-PAKE server
     def bob(self, Pa):
         self.Pb = self.a * self.sj + 2 * self.ej
-        es = Ding19.gen_pubkey_error(self.n, self.q, self.sigma)
-        rs = Ding19.gen_secret(self.n, self.q, self.sigma, secrets.randbits(32))
+        es = LBA_PAKE.gen_pubkey_error(self.n, self.q, self.sigma)
+        rs = LBA_PAKE.gen_secret(self.n, self.q, self.sigma, secrets.randbits(32))
         self.xs = self.a * rs + 2 * es  
         #print(self.xs)
         c = self.hash1(Pa)
         d = self.hash2(self.xs)
         
-        self.eb = Ding19.gen_shared_error(self.n, self.q, self.sigma)
+        self.eb = LBA_PAKE.gen_shared_error(self.n, self.q, self.sigma)
 
         Pabar = Pa + self.a * c 
         self.kb = Pabar * (self.sj + d) + 2 * self.eb
@@ -84,15 +83,6 @@ class Ding19(object):
         self.skj = self.mod2(self.kb, self.wj)
         return (self.Pb, self.xs, self.wj, self.skj)
         
-    # def alice_resp(self, Pi, Pj, yj, wj):
-    #     c = self.hash1(Pi, Pj, self.xi)
-    #     d = self.hash2(Pi, Pj, self.xi, yj)
-    #     self.fi = Ding19.gen_shared_error(self.n, self.q, self.sigma)
-    #     yjbar = yj + self.a * d + 2 * self.fi
-    #     self.gi = Ding19.gen_shared_error(self.n, self.q, self.sigma)
-    #     self.ki = yjbar * (self.si + c) + 2 * self.gi
-    #     self.ski = self.mod2(self.ki, wj)
-    #     return self.ski
 
 def get_zeros(coeffs, n):
     zero_count = 0
@@ -127,9 +117,6 @@ def process_k(k, n, kn_bnd, t):
             if (known[i] <= kn_bnd  or known[i] >= (q - kn_bnd)) and signals[i] == None:
                 signals[i] = wj[i]
                 got_signals += 1
-                # print(got_signals)
-    # print("finish:", k)
-    # print(signals)
     result = [signals, query]
     return result
 
@@ -141,11 +128,6 @@ def collect_signals(n, q, istar, kn_bnd, t):
 
     num_k = q // t
 
-    # num_k = 20
-    # results = process_k(num_k, n, kn_bnd, t)
-    # print(results)
-    # return results
-
     pool = Pool(num_k)
     results = pool.starmap(process_k, zip(range(num_k), repeat(n), repeat(kn_bnd), repeat(t)))
     pool.close()
@@ -156,7 +138,6 @@ def collect_signals(n, q, istar, kn_bnd, t):
     for i in results:
         signals.append(i[0])
         query.append(i[1])
-    # print('signals :\n', signals)
     f[istar] = 0
     return signals, query
 
@@ -166,7 +147,7 @@ def collect_abs(n, q, sigma, istar, kn_bnd, t):
     coeffs_abs = list(range(n))
     for i in range(n):
         f = [signals[k][i] for k in range(q // t)]
-        coeffs_abs[i] = helper.likeliest_abs_secret_from_signals_count(f, Ding19.sig, sigma)
+        coeffs_abs[i] = helper.likeliest_abs_secret_from_signals_count(f, LBA_PAKE.sig, sigma)
         if istar == 0 and coeffs_abs[i] != abs(execution.sj[i]):
             print("error: ", coeffs_abs[i], execution.sj[i], f)
     return coeffs_abs, sum(query)
@@ -211,10 +192,6 @@ def attack(n, q, sigma, a, sj, kn_bnd, kn_bnd2, t, t2):
     coeffs_abs, getquery = collect_abs(n, q, sigma, 0, kn_bnd, t)
     query += getquery
     print(coeffs_abs)
-    # return True, query
-    # print("                           ", strarray(range(n)))
-    # print("istar = ", 0, "coeffs[istar] = ", strarray(coeffs_abs))
-    # coeffs_abs = [1, 3, 1, 4, 2, 0, 3, 0, 1, 2, 1, 4, 1, 5, 1, 6, 2, 3, 1, 1, 3, 6, 4, 1, 1, 3, 2, 1, 1, 0, 1, 7, 1, 1, 2, 0, 3, 1, 2, 0, 3, 0, 5, 3, 0, 0, 0, 6, 3, 3, 4, 5, 1, 1, 2, 2, 8, 4, 0, 2, 1, 5, 1, 1, 1, 1, 2, 2, 3, 2, 2, 3, 3, 5, 2, 5, 2, 6, 1, 7, 4, 8, 2, 5, 1, 4, 2, 5, 2, 2, 4, 0, 6, 8, 3, 1, 3, 5, 0, 5, 3, 1, 2, 0, 8, 0, 1, 5, 7, 0, 1, 9, 5, 1, 5, 2, 0, 1, 4, 1, 2, 6, 4, 3, 0, 3, 4, 4]
 
     zero_count = get_zeros(coeffs_abs,n) #3
     MAX_ISTAR = zero_count + 2
@@ -255,7 +232,6 @@ if __name__ == "__main__":
     t2 = 86000
     print("parameters: n = {:d}, q = {:d}, sigma = {:f}".format(n, q, sigma))
 
-
     c = 1
     alltime = 0
     allq = 0
@@ -267,18 +243,13 @@ if __name__ == "__main__":
         print("count = ", seed)
         random.seed(seed + now)
         seed += now
-        # seed = 2
         a = Poly.uniform(n, q)
         global f, execution
         f = Poly(n,q)
-        execution = Ding19(n, q, sigma, seed)
-        # execution.sj[0] = 11
+        execution = LBA_PAKE(n, q, sigma, seed)
         sB = execution.sj
-        #print("     ", strarray(range(n)))
         print(min(sB),max(sB), list(sB).index(max(sB)))
         print("sB = ", strarray(sB))
-        # eb = execution.ej
-        # print(eb, max(eb))
         rel, getquery = attack(n,q,sigma,a,sB,kn_bnd,kn_bnd2,t1,t2)
         if rel != False:
             succ += 1

@@ -2,22 +2,21 @@ import math
 from gpoly import *
 import random
 from ctypes import *
-import cProfile
 import time
 from itertools import repeat
 from multiprocessing import Pool
 from sys import argv
 
-class Ding19(object):
+class LBA_PAKE(object):
     def __init__(self, n, q, sigma, seed = None):
         self.n = n
         self.q = q
         self.sigma = sigma
         self.a = Poly.uniform(self.n, self.q)
-        self.si = Ding19.gen_secret(self.n, self.q, self.sigma)
-        self.ei = Ding19.gen_pubkey_error(self.n, self.q, self.sigma)
-        self.sj = Ding19.gen_secret(self.n, self.q, self.sigma, seed)
-        self.ej = Ding19.gen_pubkey_error(self.n, self.q, self.sigma)
+        self.si = LBA_PAKE.gen_secret(self.n, self.q, self.sigma)
+        self.ei = LBA_PAKE.gen_pubkey_error(self.n, self.q, self.sigma)
+        self.sj = LBA_PAKE.gen_secret(self.n, self.q, self.sigma, seed)
+        self.ej = LBA_PAKE.gen_pubkey_error(self.n, self.q, self.sigma)
 
     @staticmethod
     def gen_secret(n, q, sigma, seed = None):
@@ -39,7 +38,7 @@ class Ding19(object):
             return 0
 
     def signal(self, v):
-        return [Ding19.sig(self.q, v[i]) for i in range(self.n)]
+        return [LBA_PAKE.sig(self.q, v[i]) for i in range(self.n)]
 
     def mod2(self, v, w):
         if self.n != v.n or self.n != len(w): raise Exception
@@ -64,17 +63,16 @@ class Ding19(object):
         self.xi = self.a * self.si + 2 * self.ei
         return self.xi
 
-    #def bob(self, Pi, Pj, xi, simplified=True):
+    # LBA-PAKE server
     def bob(self, Pa):
         self.Pb = self.a * self.sj + 2 * self.ej
-        es = Ding19.gen_pubkey_error(self.n, self.q, self.sigma)
-        rs = Ding19.gen_secret(self.n, self.q, self.sigma, secrets.randbits(32))
+        es = LBA_PAKE.gen_pubkey_error(self.n, self.q, self.sigma)
+        rs = LBA_PAKE.gen_secret(self.n, self.q, self.sigma, secrets.randbits(32))
         self.xs = self.a * rs + 2 * es  
-        #print(self.xs)
         c = self.hash1(Pa)
         d = self.hash2(self.xs)
         
-        self.eb = Ding19.gen_shared_error(self.n, self.q, self.sigma)
+        self.eb = LBA_PAKE.gen_shared_error(self.n, self.q, self.sigma)
 
         Pabar = Pa + self.a * c 
         self.kb = Pabar * (self.sj + d) + 2 * self.eb
@@ -83,15 +81,6 @@ class Ding19(object):
         self.skj = self.mod2(self.kb, self.wj)
         return (self.Pb, self.xs, self.wj, self.skj)
         
-    # def alice_resp(self, Pi, Pj, yj, wj):
-    #     c = self.hash1(Pi, Pj, self.xi)
-    #     d = self.hash2(Pi, Pj, self.xi, yj)
-    #     self.fi = Ding19.gen_shared_error(self.n, self.q, self.sigma)
-    #     yjbar = yj + self.a * d + 2 * self.fi
-    #     self.gi = Ding19.gen_shared_error(self.n, self.q, self.sigma)
-    #     self.ki = yjbar * (self.si + c) + 2 * self.gi
-    #     self.ski = self.mod2(self.ki, wj)
-    #     return self.ski
 
 def get_zeros(coeffs, n):
     zero_count = 0
@@ -114,7 +103,6 @@ def process_k(k, n, kn_bnd, t):
 
     a = execution.a
     Pa = k * f
-    # print(k)
     got_signals = 0
     while got_signals < n:
         (Pb, xs, wj, skj) = execution.bob(Pa)
@@ -126,9 +114,6 @@ def process_k(k, n, kn_bnd, t):
             if (known[i] <= kn_bnd  or known[i] >= (q - kn_bnd)) and signals[i] == None:
                 signals[i] = wj[i]
                 got_signals += 1
-                # print(got_signals)
-    # print("finish:", k)
-    # print(signals)
     result = [signals, query]
     return result
 
@@ -142,31 +127,23 @@ def collect_signals(n, q, istar, kn_bnd, t):
     if istar != 0:
         maxs *= 2
 
+    # k < q/2
     temp = 1
     while temp * t < int(q/2 + t):
         all_k.append(temp * t)
         temp += 1
-    # print(t)
-    # print(all_k)
-
-    # print(round(q / 4))
-    # print((q - math.floor(q / 4)),"\n")
     stable_k = []
   
-    # s_all = [3,11]
+    # check whether k in the nosiy region
     for k in all_k:
         flag = True
-        # print('for k ',k,':')
         ks = (k * maxs) % q
-        # print(ks-kn_bnd, " ", ks, " ", ks + kn_bnd)
         if abs(ks - round(q / 4)) < kn_bnd or abs(ks - (q - math.floor(q / 4))) < kn_bnd:
                 flag = False
         if flag == True:
             stable_k.append(k)
-    # print(stable_k)
     
     stable_t = int(q/(2 * maxs) - 2 * kn_bnd)
-    # print(stable_t)
     final_k = []
     i = 0
     while i+1 < len(stable_k):
@@ -176,19 +153,9 @@ def collect_signals(n, q, istar, kn_bnd, t):
         else:
             final_k.append(stable_k[i])
             i += 1
-    # if stable_k[len(stable_k) - 1] not in final_k:
-    #     final_k.append(stable_k[len(stable_k) - 1])
     final_k.append(int(q/2))
-    # print(final_k)
     signal_number = len(final_k)
-    # exit()
 
-    # final_k = all_k
-    # print(final_k)
-    # signal_number = len(final_k)
-    # results = process_k(all_k[2], n, kn_bnd, t)
-    # print(results)
-    # exit()
 
     pool = Pool(signal_number)
     results = pool.starmap(process_k, zip(final_k, repeat(n), repeat(kn_bnd), repeat(t)))
@@ -200,7 +167,6 @@ def collect_signals(n, q, istar, kn_bnd, t):
     for i in results:
         signals.append(i[0])
         query.append(i[1])
-    # print('signals :\n', signals)
     f[istar] = 0
     return signals, query, signal_number
 
@@ -217,11 +183,8 @@ def collect_abs(n, q, sigma, istar, kn_bnd, t):
     signals, query, signal_number = collect_signals(n, q, istar, kn_bnd, t)
     print(sum(query)," ", signal_number)
     coeffs_abs = list(range(n))
-    # print(count_changes([0,1,0,1]))
-    # return coeffs_abs, sum(query)
     for i in range(n):
         f = [signals[k][i] for k in range(signal_number)]
-        # print(f)
         coeffs_abs[i] = count_changes(f)
         if istar == 0 and coeffs_abs[i] != abs(execution.sj[i]):
             print("error: ", coeffs_abs[i], execution.sj[i], f)
@@ -261,11 +224,7 @@ def attack(n, q, sigma, a, sj, kn_bnd, kn_bnd2, t, t2):
     coeffs_abs, getquery = collect_abs(n, q, sigma, 0, kn_bnd, t)
     query += getquery
     print(coeffs_abs)
-    # return True, query
-    # print("                           ", strarray(range(n)))
-    # print("istar = ", 0, "coeffs[istar] = ", strarray(coeffs_abs))
     zero_count = get_zeros(coeffs_abs,n) #3
-    # print(zero_count)
     MAX_ISTAR = zero_count + 2
     coeffs = list(range(MAX_ISTAR))
     coeffs[0] = coeffs_abs
@@ -316,21 +275,13 @@ if __name__ == "__main__":
         print("count = ", seed)
         random.seed(seed + now)
         seed += now
-        # seed = 2
         a = Poly.uniform(n, q)
         global f, execution
         f = Poly(n,q)
-        execution = Ding19(n, q, sigma, seed)
-        # execution.sj[0] = 11
+        execution = LBA_PAKE(n, q, sigma, seed)
         sB = execution.sj
-        #print("     ", strarray(range(n)))
         print(min(sB), max(sB), list(sB).index(max(sB)))
         print("sB = ", strarray(sB))
-        # eb = execution.ej
-        # print(eb, max(eb))
-        # fp = open('drel512', 'a+')
-        # fp.write("sB is " + str(list(sB)) + "\n")
-        # fp.close()
         rel, getquery = attack(n,q,sigma,a,sB,kn_bnd,kn_bnd2,t1,t2)
         if rel != False:
             succ += 1
