@@ -2,7 +2,7 @@
 #define PARAMS_H
 
 #ifndef VERS
-#define VERS 12
+#define VERS 20
 #endif
 
 #if (VERS == 12)
