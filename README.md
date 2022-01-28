@@ -1,4 +1,4 @@
-# Attack code
+# Attack code against LBA-PAKE
 The code is based on <https://git.uwaterloo.ca/ssveitch/improved-key-reuse>
 
 Steps to lanch.
