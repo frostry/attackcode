@@ -89,7 +89,7 @@ def h0(n, q, sigma):
     
     for i in range(10000):
         s = datetime.datetime.now()
-        b = hashlib.sha3_256(str(a).encode('utf-8'))
+        b = hashlib.sha3_224(str(a).encode('utf-8'))
         e = datetime.datetime.now()
         time += (e - s).microseconds
     return time / 10000
