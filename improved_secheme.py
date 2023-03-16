@@ -185,5 +185,5 @@ if __name__ == "__main__":
             print("time of simulation on user: ", alltime)
 
         elif platform.machine() == 'x86_64':
-            alltime = 5 * h0_t + 2 * h1_t + h2_t + 3 * samp_t + 4 * mul_t + sig_t + 2 * mod_t
+            alltime = 5 * h0_t + 2 * h1_t + 3 * samp_t + 4 * mul_t + sig_t + 2 * mod_t
             print("time of simulation on server: ", alltime)
